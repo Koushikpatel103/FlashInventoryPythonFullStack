@@ -7,10 +7,6 @@ from Inventory_system import InventorySystem
 
 def main():
     """Main application entry point"""
-    print("🚀 Starting FlashInventory...")
-    print("📦 Inventory Management System with Sales Tracking")
-    print("=" * 50)
-    
     try:
         inventory_system = InventorySystem()
         inventory_system.run()

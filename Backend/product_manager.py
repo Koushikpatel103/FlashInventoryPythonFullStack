@@ -1,9 +1,7 @@
 from database import Database
 
 class ProductManager:
-    """
-    Manages all product-related operations
-    """
+    """Manages product-related operations"""
     
     def __init__(self):
         self.db = Database()
@@ -12,20 +10,20 @@ class ProductManager:
         """Add a new product to inventory"""
         # Validate input
         if not name or not sku:
-            return None, "Product name and SKU are required!"
+            return None, "Product name and SKU are required"
         
         if price <= 0:
-            return None, "Price must be greater than 0!"
+            return None, "Price must be greater than 0"
         
         if initial_stock < 0:
-            return None, "Stock quantity cannot be negative!"
+            return None, "Stock quantity cannot be negative"
         
         # Check if SKU already exists
         existing_product, error = self.db.get_product_by_sku(sku)
         if error:
             return None, error
         if existing_product:
-            return None, f"SKU '{sku}' already exists!"
+            return None, f"SKU '{sku}' already exists"
         
         # Prepare product data
         product_data = {
@@ -47,10 +45,7 @@ class ProductManager:
     
     def get_all_products(self):
         """Get all products"""
-        products, error = self.db.get_all_products()
-        if error:
-            return [], error
-        return products, None
+        return self.db.get_all_products()
     
     def get_product_by_sku(self, sku):
         """Get product by SKU"""
@@ -85,10 +80,6 @@ class ProductManager:
     def update_stock(self, product_id, new_stock):
         """Update product stock level"""
         if new_stock < 0:
-            return None, "Stock cannot be negative!"
+            return None, "Stock cannot be negative"
         
-        result, error = self.db.update_product_stock(product_id, new_stock)
-        if error:
-            return None, error
-        
-        return result, None
+        return self.db.update_product_stock(product_id, new_stock)
