@@ -2,181 +2,119 @@ import streamlit as st
 import requests
 import pandas as pd
 import plotly.express as px
-from datetime import datetime
 
-# ---------------- CONFIG ----------------
-API_BASE_URL = "http://localhost:8000"
+# ---------------- Configuration ----------------
+BACKEND_URL = "http://localhost:8000"
+
 st.set_page_config(page_title="📦 Flash Inventory System", layout="wide")
 
-# ---------------- HELPER FUNCTIONS ----------------
+# ---------------- Helper Functions ----------------
+
 def fetch_products():
     try:
-        res = requests.get(f"{API_BASE_URL}/products")
+        res = requests.get(f"{BACKEND_URL}/products/")
         data = res.json()
-        return data.get("data", []) if data.get("success") else []
-    except:
+        return data.get("data", [])
+    except Exception as e:
+        st.error(f"Failed to fetch products: {e}")
         return []
 
 def fetch_sales():
     try:
-        res = requests.get(f"{API_BASE_URL}/sales")
+        res = requests.get(f"{BACKEND_URL}/sales/")
         data = res.json()
-        return data.get("data", []) if data.get("success") else []
-    except:
+        if data.get("success"):
+            return data.get("data", [])
+        return []
+    except Exception as e:
+        st.error(f"Failed to fetch sales: {e}")
         return []
 
-def add_product(product_data):
+def record_sale(product_id, quantity, sale_price):
     try:
-        res = requests.post(f"{API_BASE_URL}/products", json=product_data)
+        res = requests.post(f"{BACKEND_URL}/sales/", json={
+            "product_id": str(product_id),
+            "quantity": quantity,
+            "sale_price": sale_price
+        })
         return res.json()
-    except:
-        return {"success": False, "error": "API connection failed"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
-def update_product(product_id, update_data):
-    try:
-        res = requests.put(f"{API_BASE_URL}/products/{product_id}", json=update_data)
-        return res.json()
-    except:
-        return {"success": False, "error": "API connection failed"}
+# ---------------- Sidebar Navigation ----------------
 
-def delete_product(product_id):
-    try:
-        res = requests.delete(f"{API_BASE_URL}/products/{product_id}")
-        return res.json()
-    except:
-        return {"success": False, "error": "API connection failed"}
-
-def record_sale(sale_data):
-    try:
-        res = requests.post(f"{API_BASE_URL}/sales", json=sale_data)
-        return res.json()
-    except:
-        return {"success": False, "error": "API connection failed"}
-
-# ---------------- NAVIGATION ----------------
 st.sidebar.title("📋 Navigation")
 page = st.sidebar.radio("Go to", ["Dashboard", "Add Product", "Update Products", "Record Sale", "View Sales"])
 
-# ---------------- DASHBOARD ----------------
+st.title("📦 Flash Inventory System")
+
+# ---------------- Dashboard ----------------
 if page == "Dashboard":
-    st.header("📊 Inventory Dashboard")
-    
+    st.header("📊 Inventory Overview")
     products = fetch_products()
-    sales = fetch_sales()
-
-    total_products = len(products)
-    total_stock_value = sum(p.get('price', 0) * p.get('stock_quantity', 0) for p in products)
-    total_sales = len(sales)
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Products", total_products)
-    col2.metric("Inventory Value (₹)", f"{total_stock_value:,.2f}")
-    col3.metric("Total Sales", total_sales)
-
-    st.subheader("Inventory by Category")
     if products:
         df_products = pd.DataFrame(products)
-        fig = px.pie(df_products, names="category", values="stock_quantity", title="Stock Distribution by Category")
-        st.plotly_chart(fig, use_container_width=True)
+        st.metric("Total Products", len(df_products))
+        st.dataframe(df_products[["name", "sku", "price", "stock_quantity"]])
     else:
-        st.info("No products found")
+        st.info("No products found.")
 
-# ---------------- ADD PRODUCT ----------------
+# ---------------- Add Product ----------------
 elif page == "Add Product":
     st.header("➕ Add New Product")
-    with st.form("add_product"):
+    with st.form("add_form"):
         name = st.text_input("Product Name")
         sku = st.text_input("SKU")
-        price = st.number_input("Price", min_value=0.0, step=0.01)
-        stock_quantity = st.number_input("Stock Quantity", min_value=0, step=1)
-        category = st.text_input("Category", value="General")
-        description = st.text_area("Description", value="No description")
+        price = st.number_input("Price", min_value=0.0, format="%.2f")
+        stock = st.number_input("Stock Quantity", min_value=0)
         submitted = st.form_submit_button("Add Product")
-        
         if submitted:
-            if name and sku:
-                result = add_product({
-                    "name": name,
-                    "sku": sku,
-                    "price": price,
-                    "stock_quantity": stock_quantity,
-                    "category": category,
-                    "description": description
-                })
-                if result.get("success"):
-                    st.success("✅ Product added successfully!")
-                else:
-                    st.error(f"❌ {result.get('error')}")
+            res = requests.post(f"{BACKEND_URL}/products/", json={
+                "name": name, "sku": sku, "price": price, "stock_quantity": stock
+            })
+            data = res.json()
+            if data.get("success"):
+                st.success("✅ Product added successfully!")
             else:
-                st.error("Name and SKU are required")
+                st.error(f"❌ {data.get('error')}")
 
-# ---------------- UPDATE PRODUCTS ----------------
+# ---------------- Update Product ----------------
 elif page == "Update Products":
-    st.header("🔄 Update Products")
+    st.header("🔄 Update Product Stock")
     products = fetch_products()
     if products:
-        for product in products:
-            with st.expander(f"{product['name']} (ID: {product['id']})"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    new_name = st.text_input("Name", value=product['name'], key=f"name_{product['id']}")
-                    new_price = st.number_input("Price", value=float(product['price']), key=f"price_{product['id']}")
-                with col2:
-                    new_stock = st.number_input("Stock", value=product['stock_quantity'], key=f"stock_{product['id']}")
-                    new_category = st.text_input("Category", value=product.get('category', ''), key=f"cat_{product['id']}")
-                
-                if st.button("Update", key=f"update_{product['id']}"):
-                    update_data = {
-                        "name": new_name,
-                        "price": new_price,
-                        "stock_quantity": new_stock,
-                        "category": new_category
-                    }
-                    result = update_product(product['id'], update_data)
-                    if result.get("success"):
-                        st.success("✅ Product updated successfully!")
-                    else:
-                        st.error(f"❌ {result.get('error')}")
-                
-                if st.button("Delete", key=f"delete_{product['id']}"):
-                    result = delete_product(product['id'])
-                    if result.get("success"):
-                        st.success("✅ Product deleted!")
-                        st.experimental_rerun()
-                    else:
-                        st.error(f"❌ {result.get('error')}")
+        product = st.selectbox("Select Product", products, format_func=lambda x: f"{x['name']} (Stock: {x['stock_quantity']})")
+        new_stock = st.number_input("New Stock Quantity", min_value=0)
+        if st.button("Update Stock"):
+            res = requests.put(f"{BACKEND_URL}/products/{product['id']}/stock", params={"new_stock": new_stock})
+            data = res.json()
+            if data.get("success"):
+                st.success("✅ Stock updated successfully!")
+            else:
+                st.error(f"❌ {data.get('error')}")
     else:
-        st.info("No products found")
+        st.warning("No products found.")
 
-# ---------------- RECORD SALE ----------------
+# ---------------- Record Sale ----------------
 elif page == "Record Sale":
     st.header("🧾 Record Sale")
     products = fetch_products()
     if products:
-        available_products = [p for p in products if p['stock_quantity'] > 0]
-        if available_products:
-            product_options = {f"{p['name']} (Stock: {p['stock_quantity']})": p['id'] for p in available_products}
-            with st.form("record_sale"):
-                selected = st.selectbox("Select Product", list(product_options.keys()))
-                quantity = st.number_input("Quantity", min_value=1, value=1)
-                sale_price = st.number_input("Sale Price", min_value=0.0, step=0.01)
-                if st.form_submit_button("Record Sale"):
-                    product_id = product_options[selected]
-                    result = record_sale({
-                        "product_id": product_id,
-                        "quantity": quantity,
-                        "sale_price": sale_price
-                    })
-                    if result.get("success"):
-                        st.success("✅ Sale recorded successfully!")
-                    else:
-                        st.error(f"❌ {result.get('error')}")
-        else:
-            st.warning("No products available for sale")
+        product = st.selectbox("Select Product", products, format_func=lambda x: f"{x['name']} (Stock: {x['stock_quantity']})")
+        quantity = st.number_input("Quantity", min_value=1)
+        sale_price = st.number_input("Sale Price", min_value=0.0, format="%.2f")
+        if st.button("Record Sale"):
+            result = record_sale(product["id"], quantity, sale_price)
+            if result.get("success"):
+                st.success("✅ Sale recorded successfully!")
+            elif result.get("error"):
+                st.error(f"❌ {result['error']}")
+            else:
+                st.warning("⚠️ Unexpected response.")
     else:
-        st.warning("No products found")
+        st.warning("No products available for sale.")
 
-# ---------------- VIEW SALES ----------------
+# ---------------- View Sales ----------------
 elif page == "View Sales":
     st.header("📄 Sales History")
     sales = fetch_sales()
@@ -197,19 +135,23 @@ elif page == "View Sales":
         df_sales = pd.DataFrame(sales_list)
         st.dataframe(df_sales.sort_values("Date", ascending=False))
 
+        # Summary metrics
         st.subheader("Sales Summary")
         total_revenue = df_sales["Total"].sum()
         total_items = df_sales["Quantity"].sum()
         st.metric("Total Revenue (₹)", f"{total_revenue:,.2f}")
         st.metric("Total Items Sold", total_items)
 
-        st.subheader("Sales Over Time")
-        fig_time = px.line(df_sales.groupby("Date").sum().reset_index(), x="Date", y="Total", title="Revenue Over Time")
+        # Revenue over time
+        st.subheader("Revenue Over Time")
+        df_time = df_sales.groupby("Date")[["Total"]].sum().reset_index()
+        fig_time = px.line(df_time, x="Date", y="Total", title="Revenue Over Time")
         st.plotly_chart(fig_time, use_container_width=True)
 
+        # Top-selling products
         st.subheader("Top Selling Products")
-        top_products = df_sales.groupby("Product").sum().sort_values("Total", ascending=False).reset_index()
-        fig_top = px.bar(top_products, x="Product", y="Total", title="Top Selling Products", color="Total")
+        df_top = df_sales.groupby("Product")[["Total", "Quantity"]].sum().sort_values("Total", ascending=False).reset_index()
+        fig_top = px.bar(df_top, x="Product", y="Total", title="Top Selling Products", color="Total")
         st.plotly_chart(fig_top, use_container_width=True)
     else:
-        st.info("No sales recorded yet")
+        st.info("No sales recorded yet.")
